@@ -1,7 +1,6 @@
 # How Kidney Function and Patient Characteristics Influence Hemoglobin Levels in CKD Patients
 
 > Course project – Weill Cornell Medicine, Biostatistics & Data Science  
-> Group 4: Ranxuan Li, Sinuo Lu, Yongxian Zhang
 
 ---
 
