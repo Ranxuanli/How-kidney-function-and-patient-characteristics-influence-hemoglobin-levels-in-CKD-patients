@@ -1,0 +1,755 @@
+---
+title: "final"
+format: html
+editor: visual
+---
+
+
+```{r}
+library(caret)#
+```
+
+## Data preparation
+
+
+```{r}
+
+file_path <- '/Users/apple/Desktop/me/WCM/semester/fall1/biosta1/final/kidney_disease.csv'
+df <- read.csv(file_path)
+#glimpse(df)
+#str(df)
+head(df)
+```
+
+```{r}
+sum(duplicated(df))
+#df[duplicated(df),]
+```
+
+```{r ,warning=FALSE,message=FALSE}
+
+#df <- subset(df, select = -id)#please run this for one first time
+#df <- df[, !names(df) %in% c("id")]
+#str(df)
+#colnames(df)
+
+
+
+
+num_cols <- c(
+  "Age.of.the.patient",
+  "Blood.Pressure",
+  "Specific.Gravity..urine.",
+#  "Albumin.in.urine",
+#  "Sugar.in.urine",
+  "Blood.Glucose.Random",
+  "Blood.Urea",
+  "Serum.Creatinine",
+  "Sodium.in.blood",
+  "Potassium.in.blood",
+  "Hemoglobin.level",
+  "Packed.Cell.Volume..Hematocrit.",
+  "White.Blood.Cell.Count",
+  "Red.Blood.Cell.Count"
+)
+
+df[num_cols] <- lapply(df[num_cols], function(x) as.numeric(x))
+
+
+str(df)
+cat_cols <- names(df)[sapply(df, is.character) | sapply(df, is.factor)]
+#num_col <- names(df)[!(sapply(df, is.character) | sapply(df, is.factor))]
+#
+cat_cols
+#num_col
+
+#summary(df)
+```
+
+```{r}
+df <- df[-1,]
+#删除第一行	df <- df[-1, ]
+#删除前两行	df <- df[-c(1,2), ]
+#删除第 i 行	df <- df[-i, ]
+#保留从第 2 行开始的所有行	df <- df[2:nrow(df), ]
+#head(df)
+
+df$`Diabetes.Mellitus` <- gsub("\\\tno", "no", df$`Diabetes.Mellitus`)
+df$`Diabetes.Mellitus` <- gsub("\\\tyes", "yes", df$`Diabetes.Mellitus`)
+
+df$`Coronary.Artery.Disease` <- gsub("\\\tno", "no", df$`Coronary.Artery.Disease`)
+df$`Coronary.Artery.Disease` <- gsub("\\\tyes", "yes", df$`Coronary.Artery.Disease`)
+
+df$Diagnosis.label  <- gsub("ckd\\\t", "ckd", df$Diagnosis.label )
+#summary(df)
+```
+
+```{r}
+
+colSums(is.na(df))
+```
+
+```{r}
+#random -- NA--numeric
+Random_value_Imputation <- function(x, seed=42) {
+  set.seed(seed)
+  na_index <- is.na(x)
+  x[na_index] <- sample(x[!na_index], sum(na_index), replace=TRUE)
+  return(x)
+}# "Albumin.in.urine"                "Sugar.in.urine" 
+
+#mode -- NA--cate
+impute_mode <- function(x, seed=42) {
+  set.seed(seed)
+  mode_val <- names(sort(table(x), decreasing = TRUE))[1]
+  x[is.na(x)] <- mode_val
+  return(x)
+}
+
+#num_cols
+#cat_cols
+for (col in num_cols) {
+  df[[col]] <- Random_value_Imputation(df[[col]], seed=203)
+}
+for (col in cat_cols) {
+  df[[col]] <- impute_mode(df[[col]], seed=203)
+}
+```
+
+
+## corelation heatmap
+
+```{r message=FALSE, warning=FALSE}
+library(corrplot)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
+num_data <- df[, num_cols]
+
+# 确保都是数值型
+num_data <- mutate_all(num_data, function(x) as.numeric(as.character(x)))
+
+# 3️⃣ 计算相关矩阵（用 complete.obs 忽略缺失）
+corr_matrix <- cor(num_data, use = "complete.obs")
+# 转成长表格格式
+corr_melt <- melt(corr_matrix)
+
+# 画图
+ggplot(corr_melt, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "#2E86AB", mid = "white", high = "#E74C3C",
+                       midpoint = 0, limit = c(-1, 1), name = "Correlation") +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        panel.grid = element_blank(),
+        axis.title = element_blank()) +
+  coord_fixed() +
+  geom_text(aes(label = sprintf("%.2f", value)), size = 1.5, color = "black") +
+  labs(title = "Correlation Heatmap of Numeric Variables")
+```
+
+
+```{r}
+summary(df)
+
+#colSums(is.na(df))
+head(df)
+#df<-subset(df,select = -Patient.ID)
+cat_cols <- setdiff(cat_cols, "Patient.ID")
+
+
+# Perform label encoding for categorical variables
+df$Hypertension <- as.integer(factor(df$Hypertension))
+df$Diabetes.Mellitus <- as.integer(factor(df$Diabetes.Mellitus))
+df$Coronary.Artery.Disease <- as.integer(factor(df$Coronary.Artery.Disease))
+df$Appetite <- as.integer(factor(df$Appetite))
+df$Pedal.Edema..swelling.of.legs. <- as.integer(factor(df$Pedal.Edema..swelling.of.legs.))
+df$Anemia <- as.integer(factor(df$Anemia))
+df$Red.Blood.Cells.in.urine <- as.integer(factor(df$Red.Blood.Cells.in.urine))
+df$Albumin.in.urine <- as.integer(factor(df$Albumin.in.urine))
+df$Sugar.in.urine <- as.integer(factor(df$Sugar.in.urine))
+df$Pus.Cells.in.urine <- as.integer(factor(df$Pus.Cells.in.urine))
+df$Pus.Cell.Clumps <- as.integer(factor(df$Pus.Cell.Clumps))
+df$Bacteria.in.urine <- as.integer(factor(df$Bacteria.in.urine))
+
+#df$packed_cell_volume <- as.integer(factor(df$packed_cell_volume))
+#df$white_blood_cell_count <- as.integer(factor(df$white_blood_cell_count))
+
+#df$red_blood_cell_count <- as.integer(factor(df$red_blood_cell_count))
+df$ Diagnosis.label <- as.integer(factor(df$ Diagnosis.label))
+cat_cols
+
+str(df)
+```
+
+```{r}
+sapply(df, is.numeric)
+
+
+
+```
+
+
+
+```{r warning=FALSE,message=FALSE}
+
+#install.packages("caret")
+library(caret)
+index <- createDataPartition(df$ Diagnosis.label, p = 0.8, list = FALSE)
+train_data <- df[index, ]
+test_data <- df[-index, ]
+
+#转换标签为二进制，机器学习模型通常要求二进制标签
+train_data$ Diagnosis.label <- ifelse(train_data$ Diagnosis.label == 2, 1, 0)
+test_data$ Diagnosis.label <- ifelse(test_data$ Diagnosis.label == 2, 1, 0)
+
+#拆分 X / y
+X_train <- as.matrix(train_data[, -which(names(train_data) == "Diagnosis.label")])
+X_test  <- as.matrix(test_data[, -which(names(test_data) == "Diagnosis.label")])
+y_train <- train_data$ Diagnosis.label
+y_test  <- test_data$ Diagnosis.label
+
+summary(train_data)
+
+```
+以上是数据准备
+
+## 先整体画一个
+
+
+
+```{r}
+target <- "Serum.Creatinine"
+
+num_cols_plot <- setdiff(num_cols, target)
+
+plot_list <- lapply(num_cols_plot, function(v){
+  ggplot(df, aes_string(x = v, y = target)) +
+    geom_point(alpha = 0.6) +
+    geom_smooth(method = "lm", se = FALSE, color = "blue") +
+    labs(title = paste("Serum Creatinine vs", v),
+         x = v,
+         y = "Serum Creatinine")
+})
+
+plot_list
+
+
+
+
+
+```
+
+## 2.Relationship between kidney function and hemoglobin
+Q1:Is kidney function associated with hemoglobin level in CKD patients?
+--Kidney dysfunction is significantly associated with lower hemoglobin.
+
+```{r}
+write.csv(df, "kidney_clean.csv", row.names = FALSE)
+
+
+ggplot(df, aes(x = Serum.Creatinine, y = Hemoglobin.level)) +
+geom_point(alpha = 0.6) +
+geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  theme_minimal()+
+labs(title = "Relationship between Creatinine and Hemoglobin.level",
+x = "Serum Creatinine", y = "Hemoglobin.level")
+
+
+
+```
+
+Extrema of Serum Creatinine strongly leverage and influence linear regression, causing the blue regression line to be "skewed," a very typical problem in CKD data.
+
+Instead of crudely deleting data, we should handle outliers using statistically sound methods, including sensitivity analysis.
+
+
+####Step 1: Quantify outliers & leverage using formal metrics
+1.1 Calculate Cook's Distance (impact point)
+
+```{r}
+
+fit_sc <- lm(Hemoglobin.level ~ Serum.Creatinine, data = df)
+
+# Cook's distance
+cook <- cooks.distance(fit_sc)
+
+# 查看可能的影响点
+which(cook > 4/length(cook))
+
+plot(fit_sc, which = 5)
+
+```
+
+1.2 check point leverage
+
+```{r}
+lev <- hatvalues(fit_sc)
+
+plot(lev, type = "h",
+     main = "Leverage Values",
+     ylab = "Leverage")
+abline(h = 2 * mean(lev), col = "red", lty = 2)
+
+```
+
+
+#### check the distribution of Derum Creatinine
+
+```{r}
+hist(df$Serum.Creatinine,breaks = 30)
+
+
+```
+
+### Medically appropriate management (avoiding arbitrary deletion of data)
+In CKD, Creatinine levels are inherently severely right-biased, so recommended approaches include:
+✅ Method A: Taking the logarithm of Creatinine
+
+```{r}
+df <- df %>%
+  mutate(log_creatinine = log(Serum.Creatinine + 0.1))
+
+ggplot(df, aes(x = log_creatinine, y = Hemoglobin.level)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  theme_minimal()+
+  labs(title = "Hemoglobin vs log(Serum Creatinine)",
+       x = "log(Serum Creatinine)",
+       y = "Hemoglobin level")
+```
+
+Scatterplots revealed several extreme serum creatinine values exerting high leverage on the linear regression line. Given the known right-skewed distribution of creatinine in CKD patients, a log-transformation was applied to reduce the influence of extreme observations and improve model stability. After transformation, the relationship between creatinine and hemoglobin appeared more linear and less driven by a small number of influential cases, resulting in a more reliable estimation of the association.
+
+
+
+
+```{r}
+fit <- lm(Hemoglobin.level ~ log_creatinine, data = df)
+
+summary(fit)
+
+
+fit$coefficients   # intercept & slope
+
+
+```
+
+
+residuals sum to 0
+
+mean(fitted) = mean(observed)
+
+```{r}
+
+
+sum(fit$residuals)         # should be ~ 0
+mean(fit$fitted.values)
+mean(df$Serum.Creatinine)
+
+
+```
+
+## Regression DIagnosis
+
+```{r}
+
+plot(fit$fitted.values, fit$residuals,
+xlab="Fitted values", ylab="Residuals",
+main="Residuals vs Fitted", pch=20, col="steelblue")
+abline(h=0,lwd=2,lty=2)
+
+par(mfrow = c(2, 2))      # 2x2 排版
+plot(fit) 
+
+```
+
+
+
+```{r}
+
+qqnorm(fit$residuals, pch=20, col="darkred")
+qqline(fit$residuals, col="blue", lwd=2)
+
+
+
+```
+
+
+
+
+```{r}
+plot(fit, which = 1)
+plot(fit, which = 2)
+plot(fit, which = 4)
+plot(fit, which = 3)
+
+
+plot(fit, which = 5)
+
+
+```
+
+
+## R2 explaination
+
+```{r}
+
+summary(fit)$r.squared
+
+
+summary(df)
+```
+
+
+### 3.Crude association between age and hemoglobin
+Q2:Is age associated with hemoglobin after accounting for kidney disease severity?
+--Age appears to be negatively associated with hemoglobin in the crude model.
+
+#### Crude model with only age
+
+```{r}
+fit_age <- lm(Hemoglobin.level ~ Age.of.the.patient, data = df)
+summary(fit_age)
+
+ggplot(df, aes(x = Age.of.the.patient, y = Hemoglobin.level)) +
+  geom_point(alpha = 0.6, color = "gray30") +
+  geom_smooth(method = "lm", se = FALSE, color = "darkred", linewidth = 1.2) +
+  theme_minimal() +
+  labs(
+    title = "Crude Association between Age and Hemoglobin Level",
+    subtitle = "Unadjusted linear regression model",
+    x = "Age of Patient (years)",
+    y = "Hemoglobin Level (g/dL)"
+  )
+
+```
+
+
+### (2)Age effect after adjusting for renal function
+
+
+
+```{r}
+
+df$Age_std   <- as.numeric(scale(df$Age.of.the.patient))
+df$logC_std  <- as.numeric(scale(df$log_creatinine))
+fit_std <- lm(Hemoglobin.level ~ Age_std + logC_std, data = df)
+summary(fit_std)
+library(ggeffects)
+
+p_age <- ggpredict(fit_std, terms = "Age_std")
+p_age$variable <- "Age"
+
+p_cre <- ggpredict(fit_std, terms = "logC_std")
+p_cre$variable <- "Creatinine"
+
+pp <- rbind(p_age, p_cre)
+library(ggplot2)
+
+ggplot() +
+  # 原始散点（标准化）
+  geom_point(data = df, 
+             aes(x = Age_std, y = Hemoglobin.level),
+             alpha = 0.35, color = "gray40") +
+  geom_point(data = df, 
+             aes(x = logC_std, y = Hemoglobin.level),
+             alpha = 0.35, color = "gray70") +
+
+  # adjusted regression lines
+  geom_line(data = pp,
+            aes(x = x, y = predicted, color = variable),
+            size = 1.25) +
+  geom_ribbon(data = pp,
+              aes(x = x, ymin = conf.low, ymax = conf.high, fill = variable),
+              alpha = 0.15, color = NA) +
+
+  theme_minimal() +
+  labs(
+    title = "Adjusted Effects of Age and Creatinine on Hemoglobin",
+    subtitle = "Partial regression lines after standardizing predictors",
+    x = "Standardized Predictor Value",
+    y = "Hemoglobin Level (g/dL)",
+    color = "Effect",
+    fill = "Effect"
+  )
+
+
+
+```
+
+
+To account for the effect of kidney function, a multivariable linear regression model was fitted with hemoglobin level as the outcome and both serum creatinine and age as predictors. After adjustment for creatinine, the association between age and hemoglobin was substantially attenuated compared to the crude model, indicating that the apparent relationship between age and hemoglobin is partly mediated or confounded by renal function severity. This suggests that kidney dysfunction plays a more central role in explaining anemia in CKD patients than age alone.
+
+
+```{r}
+#install.packages("ggeffects")
+library(ggeffects)
+
+pred <- ggpredict(fit_adj, terms = "Age.of.the.patient")
+
+ggplot(pred, aes(x = x, y = predicted)) +
+  geom_line(color = "darkgreen", linewidth = 1.2) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  theme_minimal() +
+  labs(
+    title = "Adjusted Effect of Age on Hemoglobin",
+    subtitle = "Controlling for Serum Creatinine",
+    x = "Age (years)",
+    y = "Predicted Hemoglobin (g/dL)"
+  )
+```
+The line is slightly upward.
+From young to old, the predicted change in Hb is very small (approximately 0.3 g/dL).
+After controlling for kidney function levels, the effect of age on hemoglobin is very weak, almost clinically insignificant.
+
+
+
+### Simpson Paradox
+#### Effect modification by hypertension
+Q3:Does hypertension modify the relationship between age and hemoglobin?
+--·  However, this association is distorted after stratification by hypertension.
+·  ·  This demonstrates Simpson’s paradox caused by hypertension as a confounder, reflecting its dual association with both advanced age and anemia severity.
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+library(ggplot2)
+library(dplyr)
+
+# 1. 先准备好 df_plot（你这一步已经有，可以保留）
+df_plot <- df %>%
+  filter(Hypertension %in% c(2, 3)) %>%
+  mutate(Hypertension = factor(Hypertension,
+                               levels = c(2, 3),
+                               labels = c("No Hypertension", "Hypertension")))
+
+## 图 1：整体数据拟合一条线（黑色整体回归线）
+
+p_overall <- ggplot(df_plot, aes(x = Age.of.the.patient,
+                                 y = Hemoglobin.level)) +
+  geom_point(aes(color = Hypertension), alpha = 0.6, size = 2) +
+  # 整体一条回归线（不分组）
+  geom_smooth(method = "lm", se = FALSE,
+              color = "black", linewidth = 1.2) +
+  scale_color_brewer(palette = "Set1",
+                     name = "Hypertension Status") +
+  labs(
+    title = "Age vs Hemoglobin (Overall Fit)",
+    x = "Age of Patient (years)",
+    y = "Hemoglobin Level (g/dL)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+## 图 2：分组拟合（你原来的那张）
+
+p_grouped <- ggplot(df_plot, aes(x = Age.of.the.patient,
+                                 y = Hemoglobin.level,
+                                 color = Hypertension)) +
+  geom_point(alpha = 0.6, size = 2) +
+  # 每个 Hypertension 组单独拟合回归线
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
+  scale_color_brewer(palette = "Set1",
+                     name = "Hypertension Status") +
+  labs(
+    title = "Age vs Hemoglobin Stratified by Hypertension",
+    x = "Age of Patient (years)",
+    y = "Hemoglobin Level (g/dL)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+# 画出两张图（分别显示）
+p_overall
+p_grouped
+
+  
+
+#Age.of.the.patient → Albumin.in.urine
+##X：Age of the patient（年龄，连续）
+#Y：Sodium in blood（血钠浓度，连续，mmol/L）
+#分层变量：Hypertension（是否高血压）
+```
+
+## simpson paradox calculation
+
+## data preparation
+```{r}
+
+library(dplyr)
+
+df_plot <- df %>%
+  filter(Hypertension %in% c(2, 3)) %>%
+  mutate(
+    Hypertension = factor(
+      Hypertension,
+      levels = c(2, 3),
+      labels = c("No Hypertension", "Hypertension")
+    )
+  )
+
+# 检查一下
+table(df_plot$Hypertension)
+summary(df_plot$Age.of.the.patient)
+summary(df_plot$Hemoglobin.level)
+
+
+
+
+```
+
+## fit the model
+
+```{r}
+
+# Overall linear regression: Hemoglobin ~ Age
+fit_all <- lm(Hemoglobin.level ~ Age.of.the.patient, data = df_plot)
+summary(fit_all)
+overall_slope  <- coef(fit_all)["Age.of.the.patient"]
+overall_pvalue <- summary(fit_all)$coefficients["Age.of.the.patient", "Pr(>|t|)"]
+
+overall_slope
+overall_pvalue
+
+```
+
+```{r}
+
+
+# Hypertension = "Hypertension" 组
+fit_htn <- lm(Hemoglobin.level ~ Age.of.the.patient,
+              data = df_plot %>% filter(Hypertension == "Hypertension"))
+summary(fit_htn)
+
+htn_slope  <- coef(fit_htn)["Age.of.the.patient"]
+htn_pvalue <- summary(fit_htn)$coefficients["Age.of.the.patient", "Pr(>|t|)"]
+
+htn_slope
+htn_pvalue
+
+# Hypertension = "No Hypertension" 组
+fit_nohtn <- lm(Hemoglobin.level ~ Age.of.the.patient,
+                data = df_plot %>% filter(Hypertension == "No Hypertension"))
+summary(fit_nohtn)
+
+nohtn_slope  <- coef(fit_nohtn)["Age.of.the.patient"]
+nohtn_pvalue <- summary(fit_nohtn)$coefficients["Age.of.the.patient", "Pr(>|t|)"]
+
+nohtn_slope
+nohtn_pvalue
+
+```
+
+
+However, this association is distorted after stratification by hypertension.
+ This demonstrates Simpson’s paradox caused by hypertension as a confounder, reflecting its dual association with both advanced age and anemia severity.
+
+
+#### Clinical interpretation
+
+These findings highlight that hypertension acts as a confounding variable in the relationship between age and hemoglobin. Ignoring hypertension status would lead to the misleading conclusion that increasing age directly worsens anemia severity, whereas in reality, the apparent decline is driven by the disproportionate representation of hypertensive individuals in older age groups.
+Therefore, hypertension must be explicitly accounted for when evaluating age-related changes in hemoglobin among patients with chronic kidney disease.
+
+
+
+### Validation of Age as the Confounder of Hypertension
+
+New Module: Validating Age as the Confounder of Hypertension
+Step 1: Correlation between Age and Hypertension (Numerical + Visualization)
+1.1 Spearman/Pearson Correlation
+
+```{r}
+# 将 Hypertension 转成 0/1 更直观
+df$Hypertension_bin <- ifelse(df$Hypertension == 3, 1, 0)
+
+cor.test(df$Age.of.the.patient,
+         df$Hypertension_bin,
+         method = "spearman")
+
+t.test( Age.of.the.patient~ Hypertension_bin, data = df)
+
+
+```
+
+
+
+
+
+```{r}
+
+ggplot(df_plot, aes(x = factor(Hypertension),
+               y = Age.of.the.patient,
+               fill = factor(Hypertension))) +
+  geom_boxplot(alpha = 0.7) +
+  scale_x_discrete(labels = c("No HTN", "HTN")) +
+  labs(
+    title = "Distribution of Age by Hypertension Status",
+    x = "Hypertension Status",
+    y = "Age (years)"
+  ) +
+  theme_minimal()
+
+
+```
+
+Boxplot shows that the age distribution in the hypertension group is significantly higher than in the non-hypertension group, with both the median and quartiles shifting to the right, further indicating that hypertension is more common in the elderly.
+
+### Step 2: Differences in Hemoglobin between Hypertension Groups
+
+```{r}
+
+ggplot(df_plot, aes(x = factor(Hypertension),
+               y = Hemoglobin.level,
+               fill = factor(Hypertension))) +
+  geom_boxplot(alpha = 0.7) +
+  scale_x_discrete(labels = c("No HTN", "HTN")) +
+  labs(
+    title = "Hemoglobin Level by Hypertension Status",
+    x = "Hypertension Status",
+    y = "Hemoglobin (g/dL)"
+  ) +
+  theme_minimal()
+
+t.test(Hemoglobin.level ~ Hypertension_bin, data = df)
+
+```
+
+Compared to those without hypertension, patients in the hypertension group had significantly lower hemoglobin levels (p < 0.05), suggesting that hypertension is associated with the degree of anemia.
+
+
+### Confounding Logic Summary
+
+Age satisfies the criteria for a confounding variable in the relationship between hypertension and hemoglobin:
+
+Age is significantly associated with Hypertension, with hypertensive patients being notably older on average.
+
+Age is also negatively associated with Hemoglobin level in the crude analysis.
+
+After adjusting for renal function (serum creatinine), the apparent relationship between Age and Hemoglobin becomes substantially attenuated, indicating that the crude association was partly driven by the uneven age distribution across hypertension groups.
+
+Therefore, Age acts as a confounder by influencing both the exposure (Hypertension) and the outcome (Hemoglobin), and failing to adjust for Age would result in a distorted interpretation of the hypertension–anemia relationship.
+
+
+```{r}
+
+
+
+```
+
+
+
+

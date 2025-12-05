@@ -1,0 +1,348 @@
+---
+title: "Exploratory Data Analysis"
+author: "Ranxuan Li, Yongxian Zhang, Sinuo Lu"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r global_setup, include=FALSE}
+
+## we can set the global default behavior of the code chunks using the following command. You can find out more about additionalguidance on the use of the opts_chunk$set() function of the knitr package at https://yihui.org/knitr/options/#chunk-options.
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, comment="")
+
+## You can load the R packages that you'll use here as well. 
+library(here)
+library(tidyverse)
+library(dplyr)
+library(car)
+library(stringr)
+library(ggplot2)
+library(gt)
+library(gtsummary)
+library(flextable)
+```
+
+# Data Pre-processing and Testing
+
+## Numerical variables
+## Numerical variables
+
+```{r data_prep, echo=FALSE, eval=FALSE}
+data_raw = read.csv("kidney_disease.csv")
+
+data_deblank = data_raw %>%
+  mutate(across(everything(), ~na_if(trimws(.), ""))) %>%
+  select(age, sg, al, bgr, bu, sc, hemo, pcv, htn, dm, ane, classification) 
+data_left = sapply(data_deblank[,1:8], as.numeric) 
+data_right = data_deblank[, -1:-8]
+data = cbind(data_left, data_right)
+
+#exclude hidden spaces/tabs
+data$classification = str_trim(data$classification)
+
+#fill num vari NA with median and chara NA with mode #is.numeric(data[[1]])
+get_mode <- function(x) {
+  ux <- na.omit(unique(x))
+  ux[which.max(tabulate(match(x, ux)))]
+}
+data <- data %>%
+  mutate(across(where(is.numeric), ~replace_na(., median(., na.rm=TRUE)))) %>%
+  mutate(across(where(is.character), ~replace_na(., get_mode(.))))
+
+```
+
+### Test whether equal variance
+
+```{r explore, echo=FALSE, eval=FALSE}
+
+# We use levene test to see whether inter-group variance is different to determine which testing method for use.
+
+leveneTest(sg ~ classification, data = data) #, center = "median")
+leveneTest(al ~ classification, data = data)
+leveneTest(bgr ~ classification, data = data)
+leveneTest(bu ~ classification, data = data)
+leveneTest(sc ~ classification, data = data)
+leveneTest(hemo ~ classification, data = data)
+leveneTest(pcv ~ classification, data = data)
+```
+
+### test whether normal distribution
+
+```{r}
+# we plot the data to see normality
+ggplot(data, aes(sample = al)) +
+  stat_qq() + 
+  stat_qq_line() +
+  facet_wrap(~ classification)
+
+ggplot(data, aes(x = bgr)) +
+  geom_histogram()+
+  facet_wrap(~ classification)
+
+
+```
+
+
+### data not normal, t-test assumption violated
+```{r}
+# Data is not normally distributed, so t-tests are not accurate
+
+# if we use only complete observations
+#data = data[complete.cases(data), ]
+
+# t.test(not equal var)
+t.test(sg ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+t.test(al ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+t.test(bgr ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+t.test(bu ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+t.test(sc ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+t.test(hemo ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+t.test(pcv ~ classification, data=data, na.exclude=TRUE, var.equal = F)
+```
+
+
+
+
+### not normal, use wilcox.test()
+```{r}
+#we use wilcox.test in this situation
+wilcox.test(sg ~ classification, data=data)
+wilcox.test(al ~ classification, data=data)
+wilcox.test(bgr ~ classification, data=data)
+wilcox.test(bu ~ classification, data=data)
+wilcox.test(sc ~ classification, data=data)
+wilcox.test(hemo ~ classification, data=data)
+wilcox.test(pcv ~ classification, data=data)
+wilcox.test(age ~ classification, data=data)
+
+```
+
+
+## Categorical variables.
+
+```{r}
+# for categorical values, we use chiaq tests
+htn_table = table(data$htn, data$classification)
+dm_table = table(data$dm, data$classification)
+ane_table = table(data$ane, data$classification)
+
+h = chisq.test(htn_table, correct=FALSE)
+d = chisq.test(dm_table, correct=FALSE)
+a = chisq.test(ane_table, correct=FALSE)
+
+h;d;a
+
+h$expected
+d$expected
+a$expected
+# all expectations > 5, chisq test valid
+```
+
+
+
+
+
+
+
+
+## Categorical variables.
+
+```{r}
+htn_table = table(data$htn, data$classification)
+dm_table = table(data$dm, data$classification)
+ane_table = table(data$ane, data$classification)
+
+h = chisq.test(htn_table, correct=FALSE)
+d = chisq.test(dm_table, correct=FALSE)
+a = chisq.test(ane_table, correct=FALSE)
+
+h;d;a
+
+h$expected
+d$expected
+a$expected
+# all expectations > 5
+```
+# EDA
+### Summary data analysis
+```{r summ}
+cat_vars <- c("rbc", "pc", "pcc", "ba", 
+              "htn", "dm", "cad", "appet", "pe", "ane", "classification")
+
+data_sum <- data_deblank_complete %>% 
+  select(-"id") %>%
+  mutate(across(all_of(cat_vars), as.factor))
+# choose
+```
+
+```{r groupedsum}
+data_sum2 <- data_sum %>%
+  mutate(across(where(is.numeric), ~replace_na(., median(., na.rm=TRUE)))) %>%
+  mutate(across(where(is.character), ~replace_na(., mode(.))))
+
+
+summary_table <- data_sum %>%
+  tbl_summary(
+    by = classification,
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    missing = "no"
+  )%>%
+  add_p() %>% 
+  add_overall() %>%
+  bold_p() %>%                 
+  modify_header(label = "**Variable**")
+
+summary_table
+
+# to output the table in a docx
+summary_table %>% 
+  as_flex_table() %>% 
+  flextable::save_as_docx(path = "CKD_table1.docx")
+
+```
+
+
+
+The baseline characteristics show that CKD patients differ substantially from non-CKD participants in almost every clinical, laboratory, and demographic variable. Continuous kidney function markers (serum creatinine, blood urea, hemoglobin, PCV, sodium) display large and statistically significant differences. CKD patients presented with markedly higher rates of hypertension, diabetes, proteinuria, glycosuria, urinary abnormalities, anemia, and poor appetite.
+
+Overall, the table clearly demonstrates that CKD patients exhibit the classical clinical and biochemical signatures of renal impairment.
+
+
+
+### Correlation plot
+
+```{r corrplot}
+data_deblank_complete = data_raw %>%
+  mutate(across(everything(), ~na_if(trimws(.), ""))) 
+data_num = sapply(data_deblank_complete[,c(2:6,11:19)], as.numeric) 
+data_chara = data_deblank_complete[, c(1,7:10,20:26)]
+data_deblank_complete = cbind(data_num, data_chara)
+
+
+data_num <- data_num %>%
+  as.data.frame()%>%
+  mutate(across(where(is.numeric), ~replace_na(., median(., na.rm=TRUE))))
+
+data_corr = data_num 
+colnames(data_corr) = c("Age", "Blood presure", "Specific Gravity (urine)", "Albumin in urine", "Sugar in urine",
+                    "Blood Glucose Random", "Blood Urea", "Serum Creatinine","Sodium in blood","Potassium in blood",
+                    "Hemoglobin level","Packed Cell Volume (Hematocrit)","White Blood Cell Count","Red Blood Cell Count")
+# Correlation on complete cases of X
+cors = cor(data_corr)
+#round(cors, 2)
+
+# Visualize (corrplot)
+corrplot::corrplot(cors, method = "color", type = "upper",
+                   number.cex = .6, tl.cex = 0.7,
+                   tl.col = "black", tl.srt = 45, diag = FALSE)
+
+```
+The correlation heatmap reveals clinically consistent clusters among the biochemical and clinical markers. Serum creatinine and blood urea show a strong positive correlation, reflecting their shared role as indicators of declining glomerular filtration rate. Hemoglobin and packed cell volume also correlate strongly, forming a distinct anemia-related cluster, consistent with the loss of erythropoietin production in chronic kidney disease.
+
+Blood glucose and urine sugar demonstrate moderate positive correlation, indicating a metabolic cluster related to diabetes mellitus, a major risk factor for CKD. In contrast, electrolytes (sodium and potassium) and white blood cell count exhibit weak correlations with most variables, suggesting limited discriminative value for CKD in this dataset.
+
+Overall, the correlation plot highlights three clinically relevant domains—renal filtration impairment, anemia, and diabetes, each strongly associated with CKD and consistent with the variables selected for further analysis.
+
+### Heat map
+
+```{r}
+data_binary <- data_chara %>%
+  select(-1)%>%
+  mutate(across(everything(), ~ as.numeric(as.factor(.x)) - 1))
+
+data_heatmap = cbind(data_num, data_binary)
+cor_mat <- cor(data_heatmap, method = "pearson", use = "pairwise.complete.obs")
+cor_long <- cor_mat %>%
+  as.data.frame() %>%
+  mutate(var1 = row.names(cor_mat)) %>%
+  pivot_longer(
+    cols = -var1,
+    names_to = "var2",
+    values_to = "correlation"
+  )
+
+ggplot(cor_long, aes(x = var1, y = var2, fill = correlation)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  scale_fill_gradient2(
+    low = "cyan",
+    mid = "blue",
+    high = "red",
+    midpoint = 0,
+    name = "Pearson Correlation"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title = element_blank()
+  )
+
+```
+
+
+### Age as a potential confounder
+
+Both the summary table and the correlation matrix indicate that age is strongly associated with CKD status (p < 0.001), with CKD patients being substantially older on average. The corrplot further shows that age is positively correlated with blood pressure and negatively correlated with hemoglobin levels. These variables are also significantly associated with CKD.
+
+Because age simultaneously influences the exposure variables (e.g., hemoglobin, hypertension) and the outcome (CKD), and is unequally distributed between groups, age satisfies the criteria for being a confounder. Therefore, the observed association between hemoglobin or hypertension and CKD may be partially explained by differences in age distribution.
+
+To further investigate whether age acts as a confounder in the association between hemoglobin, hypertension, and CKD status, we examined the relationships between age and these variables. 
+
+```{r boxplothpn}
+data %>%
+  ggplot(aes(htn,age, colour = htn)) +
+  geom_boxplot() +
+  labs(title = "Boxplots of Age by Hypertension Status",
+       color = "Hypertension")+
+  theme_minimal()+
+  theme(text = element_text(face = "bold"),
+        plot.title = element_text(hjust = 0.5))
+
+data %>%
+  ggplot(aes(classification,age, colour = classification)) +
+  geom_boxplot() +
+  labs(title = "Boxplots of Age by CKD Status",
+       color = "CKD")+
+  theme_minimal()+
+  theme(text = element_text(face = "bold"),
+        plot.title = element_text(hjust = 0.5))
+
+```
+```{r lm}
+ggplot(data, aes(x = age, y = hemo)) +
+ geom_point(alpha = 0.5) +
+ geom_smooth(method = "lm", se = FALSE, linewidth = 0.8, color = "red") +
+ labs(x = "Age", y = "Hemoglobin Level",
+ title = "Relationship Between Patient Age and Hemoglobin Level with Linear Regression") +
+ theme_minimal()+
+ theme(text = element_text(face = "bold"),
+ plot.title = element_text(hjust = 0.5))
+```
+
+The scatterplot of hemoglobin versus age demonstrates a mild negative linear trend, indicating that hemoglobin levels tend to decrease slightly with increasing age. Although the variability is large, this pattern is consistent with age-related declines in erythropoietin production and general physiological changes in older adults.
+
+In contrast, the boxplot comparing age distributions by hypertension status shows a pronounced difference: hypertensive patients are substantially older than non-hypertensive patients. This strong age gradient reflects the well-established epidemiological reality that hypertension is primarily an age-associated condition.
+
+Both of the figures suggest that age is a confounding variable in our analysis. Age influences both hemoglobin levels and hypertension prevalence and may therefore act as a confounder in the relationship between these variables and chronic kidney disease.
+
+
+
+
+
+
+
+
+```{r wctest}
+wilcox.test(age ~ htn, data=data)
+wilcox.test(age ~ classification, data=data)
+
+summary(lm(age~sc, data=data))
+
+```
+
