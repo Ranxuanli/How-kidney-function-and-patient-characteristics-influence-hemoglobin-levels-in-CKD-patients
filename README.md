@@ -3,6 +3,9 @@
 > Course project – Weill Cornell Medicine, Biostatistics & Data Science  
 
 ---
+<p align="center">
+  <img src="pic.png" width="70%">
+</p>
 
 ## 📌 Project Overview
 
